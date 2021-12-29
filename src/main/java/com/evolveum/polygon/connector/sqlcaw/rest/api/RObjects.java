@@ -8,7 +8,7 @@ public class RObjects<T extends  RObject> implements Serializable {
 
     private List<T> objects;
 
-    private List<T> getObjects() {
+    public List<T> getObjects() {
 
         if (objects == null) {
             objects = new ArrayList<>();
