@@ -33,9 +33,8 @@ import org.identityconnectors.framework.common.objects.filter.FilterTranslator;
 import org.identityconnectors.framework.spi.Configuration;
 import org.identityconnectors.framework.spi.Connector;
 import org.identityconnectors.framework.spi.ConnectorClass;
-import org.identityconnectors.framework.spi.operations.SchemaOp;
-import org.identityconnectors.framework.spi.operations.SearchOp;
-import org.identityconnectors.framework.spi.operations.TestOp;
+import org.identityconnectors.framework.spi.SyncTokenResultsHandler;
+import org.identityconnectors.framework.spi.operations.*;
 
 import javax.ws.rs.ClientErrorException;
 import javax.ws.rs.NotAuthorizedException;
@@ -50,7 +49,7 @@ import java.util.*;
 
 @ConnectorClass(displayNameKey = "sqlcawrest.connector.display", configurationClass = SqlCAWRestConfiguration.class)
 public class SqlCAWRestConnector extends AbstractSqlCAWRestConnector implements Connector, TestOp, SchemaOp,
-        SearchOp<Filter> {
+        SearchOp<Filter>, CreateOp, DeleteOp, UpdateDeltaOp, SyncOp {
 
     private static final Log LOG = Log.getLog(SqlCAWRestConnector.class);
 
@@ -428,5 +427,256 @@ public class SqlCAWRestConnector extends AbstractSqlCAWRestConnector implements 
         } catch (Exception ex) {
             handleGenericException(ex, "Couldn't search " + objectClass + " with filter " + query + ", reason: " + ex.getMessage());
         }
+    }
+
+    @Override
+    public Uid create(ObjectClass objectClass, Set<Attribute> set, OperationOptions operationOptions) {
+        try {
+            String uid;
+            if (ObjectClass.ACCOUNT.equals(objectClass)) {
+                RUser user = translateUser(null, set);
+                uid = userService.add(user);
+            } else {
+                throw new UnsupportedOperationException("Unkown object class " + objectClass);
+            }
+
+            LOG.ok("Created new object with the UID: {0}", uid);
+
+            return new Uid(uid);
+        } catch (Exception ex) {
+            handleGenericException(ex, "Couldn't create object " + objectClass + " with attributes " + set + ", reason: " + ex.getMessage());
+        }
+        return null;
+    }
+
+    @Override
+    public void delete(ObjectClass objectClass, Uid uid, OperationOptions operationOptions) {
+        try {
+            if (ObjectClass.ACCOUNT.equals(objectClass)) {
+                userService.delete(uid.getUidValue());
+            } else {
+                throw new UnsupportedOperationException("Unknown object class " + objectClass);
+            }
+
+            LOG.ok("The object with the uid {0} was deleted by the connector instance.", uid);
+        } catch (Exception ex) {
+            handleGenericException(ex, "Couldn't delete " + objectClass + " with the uid " + uid + ", reason: " + ex.getMessage());
+        }
+    }
+
+    @Override
+    public Set<AttributeDelta> updateDelta(ObjectClass objectClass, Uid uid, Set<AttributeDelta> set, OperationOptions operationOptions) {
+        validate(uid, objectClass);
+
+        Set<Attribute> attrsToReplace = new HashSet<>();
+        Set<Attribute> attrsToRemove = new HashSet<>();
+        Set<Attribute> attrsToAdd = new HashSet<>();
+
+        Uid newUid = null;
+
+        set.forEach(delta -> {
+
+            List<Object> valuesToReplace = delta.getValuesToReplace();
+
+            if (valuesToReplace != null) {
+
+                attrsToReplace.add(AttributeBuilder.build(delta.getName(), valuesToReplace));
+            } else {
+                List<Object> valuesToRemove = delta.getValuesToRemove();
+                List<Object> valuesToAdd = delta.getValuesToAdd();
+
+                if (valuesToRemove != null) {
+
+                    attrsToRemove.add(AttributeBuilder.build(delta.getName(), valuesToRemove));
+                } else if (valuesToAdd != null) {
+
+                    attrsToAdd.add(AttributeBuilder.build(delta.getName(), valuesToAdd));
+                }
+            }
+        });
+
+        try {
+
+            ConnectorObject old = getOldObject(objectClass, uid);
+
+            LOG.ok("Fetched the object with the uid {0} from the resource for delta update", uid.getUidValue());
+            Set<Attribute> processedAttrs = new HashSet<>();
+
+            processedAttrs.addAll(old.getAttributes());
+
+            if (!attrsToReplace.isEmpty()) {
+                LOG.ok("Processing though REPLACE set of attributes in the update attribute delta op");
+
+                attrsToReplace.forEach(newAttr -> {
+
+                    Attribute oldAttr = AttributeUtil.find(newAttr.getName(), processedAttrs);
+                    if (oldAttr != null) {
+                        processedAttrs.remove(oldAttr);
+                    }
+                    processedAttrs.add(newAttr);
+                });
+            }
+
+            if (!attrsToAdd.isEmpty()) {
+                LOG.ok("Processing through ADD set of attributes in the update attribute delta op");
+
+                attrsToAdd.forEach(newAttr -> {
+
+                    Attribute oldAttr = AttributeUtil.find(newAttr.getName(), processedAttrs);
+
+                    if (oldAttr != null) {
+                        List values = new ArrayList();
+
+                        if (oldAttr.getValue() != null) {
+
+                            values.addAll(oldAttr.getValue());
+                        }
+
+                        values.addAll(newAttr.getValue());
+                        processedAttrs.remove(oldAttr);
+                        processedAttrs.add(AttributeBuilder.build(oldAttr.getName(), values));
+                    } else {
+
+                        processedAttrs.add(newAttr);
+                    }
+                });
+            }
+
+            if (!attrsToRemove.isEmpty()) {
+                LOG.ok("Processing through DELETE set of attributes in the update attribute delta op");
+
+                attrsToRemove.forEach(newAttr -> {
+
+                    Attribute oldAttr = AttributeUtil.find(newAttr.getName(), processedAttrs);
+
+                    if (oldAttr != null) {
+
+                        List values = new ArrayList();
+
+                        if (oldAttr.getValue() != null) {
+
+                            values.addAll(oldAttr.getValue());
+                        }
+
+                        values.removeAll(newAttr.getValue());
+                        processedAttrs.remove(oldAttr);
+                        processedAttrs.add(AttributeBuilder.build(oldAttr.getName(), values));
+                    }
+                });
+            }
+
+            newUid = updateOldObject(objectClass, uid, processedAttrs);
+        } catch (Exception ex) {
+            handleGenericException(ex, "Couldn't modify attribute values from object " + objectClass +
+                    " with uid " + uid + ", reason: " + ex.getMessage());
+        }
+
+        Set<AttributeDelta> returnDelta = new HashSet<>();
+
+        if (newUid == null || newUid != uid) {
+            AttributeDelta newUidAttributeDelta = AttributeDeltaBuilder.build(Uid.NAME, newUid.getValue());
+            returnDelta.add(newUidAttributeDelta);
+        }
+        return returnDelta;
+    }
+
+    private ConnectorObject getOldObject(ObjectClass oc, Uid uid) {
+        RObject object;
+
+        if (ObjectClass.ACCOUNT.equals(oc)) {
+            object = userService.get(uid.getUidValue());
+        } else {
+            throw new UnsupportedOperationException("Unknown object class " + oc);
+        }
+
+        if (object == null) {
+            throw new UnknownUidException("Couldn't find object " + oc + " with uid " + uid);
+        }
+
+        return translate(object);
+    }
+
+    private Uid updateOldObject(ObjectClass oc, Uid uid, Set<Attribute> attributes) {
+        String uidString = null;
+
+        if (ObjectClass.ACCOUNT.equals(oc)) {
+            RUser user = translateUser(uid, attributes);
+            uidString = userService.update(user);
+        }
+
+        if (uidString != null && !uidString.isEmpty()) {
+            return new Uid(uidString);
+        } else {
+            throw new ConnectorException("Unexpected exception occurred. No uid returned by resource after update" +
+                    " operation execution for the object with the uid: " + uid + ".");
+        }
+    }
+
+    @Override
+    public void sync(ObjectClass objectClass, SyncToken syncToken, SyncResultsHandler syncResultsHandler, OperationOptions operationOptions) {
+        Long tokenLatest = (Long) getLatestSyncToken(objectClass).getValue();
+        Long token = (Long) syncToken.getValue();
+        boolean handlerExited = false;
+
+        RDeltas deltas = null;
+        try {
+            if (ObjectClass.ACCOUNT.equals(objectClass)) {
+                deltas = userService.sync(token);
+            } else {
+                throw new UnsupportedOperationException("Unknown object class " + objectClass);
+            }
+        } catch (Exception e) {
+            handleGenericException(e, "Could not execute the sync operation for the objectc class " + objectClass +
+                    " with the token " + syncToken + ", reason " + e.getMessage());
+        }
+
+        if (deltas != null) {
+            for (RDelta delta : deltas.getDeltas()) {
+                SyncDeltaBuilder sdb = new SyncDeltaBuilder();
+                sdb.setObjectClass(objectClass);
+                sdb.setToken(syncToken);
+
+                SyncDeltaType deltaType = RDeltaType.CHANGED.equals(delta.getType()) ?
+                        SyncDeltaType.CREATE_OR_UPDATE : SyncDeltaType.DELETE;
+                sdb.setDeltaType(deltaType);
+
+                RObject object = delta.getObject();
+                sdb.setUid(new Uid(object.getId()));
+
+                if (!SyncDeltaType.DELETE.equals(deltaType)) {
+                    sdb.setObject(translate(object));
+                }
+
+                if (!syncResultsHandler.handle(sdb.build())) {
+                    handlerExited = true;
+                    break;
+                }
+            }
+        }
+
+        if (syncResultsHandler instanceof SyncTokenResultsHandler) {
+            SyncTokenResultsHandler h = (SyncTokenResultsHandler) syncResultsHandler;
+
+            if (!handlerExited) {
+                h.handleResult(new SyncToken(tokenLatest));
+            } else {
+                h.handleResult(new SyncToken(token));
+            }
+        }
+    }
+
+    @Override
+    public SyncToken getLatestSyncToken(ObjectClass objectClass) {
+        if (!ObjectClass.ACCOUNT.equals(objectClass) && !(ObjectClass.GROUP.equals(objectClass))) {
+            throw new UnsupportedOperationException("Unknown object class " + objectClass);
+
+        }
+        if (ObjectClass.ACCOUNT.equals(objectClass)) {
+
+            return new SyncToken(userService.latestToken());
+        }
+
+        return null;
+
     }
 }
