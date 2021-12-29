@@ -21,15 +21,16 @@ import com.evolveum.polygon.connector.sqlcaw.rest.api.RUser;
 import com.evolveum.polygon.connector.sqlcaw.rest.api.TestService;
 import com.evolveum.polygon.connector.sqlcaw.rest.api.UserService;
 import com.evolveum.polygon.connector.sqlcaw.rest.util.AbstractSqlCAWRestConnector;
+import com.evolveum.polygon.connector.sqlcaw.rest.util.SqlCAWRestConstants;
 import org.apache.cxf.interceptor.Fault;
 import org.identityconnectors.common.logging.Log;
+import org.identityconnectors.common.security.GuardedString;
 import org.identityconnectors.framework.common.exceptions.*;
-import org.identityconnectors.framework.common.objects.Attribute;
-import org.identityconnectors.framework.common.objects.ConnectorObject;
-import org.identityconnectors.framework.common.objects.Uid;
+import org.identityconnectors.framework.common.objects.*;
 import org.identityconnectors.framework.spi.Configuration;
 import org.identityconnectors.framework.spi.Connector;
 import org.identityconnectors.framework.spi.ConnectorClass;
+import org.identityconnectors.framework.spi.operations.SchemaOp;
 import org.identityconnectors.framework.spi.operations.TestOp;
 
 import javax.ws.rs.ClientErrorException;
@@ -41,10 +42,12 @@ import java.io.IOException;
 import java.net.ConnectException;
 import java.net.NoRouteToHostException;
 import java.net.SocketTimeoutException;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Set;
 
 @ConnectorClass(displayNameKey = "sqlcawrest.connector.display", configurationClass = SqlCAWRestConfiguration.class)
-public class SqlCAWRestConnector extends AbstractSqlCAWRestConnector implements Connector, TestOp {
+public class SqlCAWRestConnector extends AbstractSqlCAWRestConnector implements Connector, TestOp, SchemaOp {
 
     private static final Log LOG = Log.getLog(SqlCAWRestConnector.class);
 
@@ -151,5 +154,87 @@ public class SqlCAWRestConnector extends AbstractSqlCAWRestConnector implements 
         } catch(Exception ex) {
             handleGenericException(ex, "Test connection failed, reason: " + ex.getMessage());
         }
+    }
+
+    @Override
+    public Schema schema() {
+
+        SchemaBuilder sb = new SchemaBuilder(SqlCAWRestConnector.class);
+        ObjectClassInfoBuilder ocBuilder = new ObjectClassInfoBuilder();
+
+        ocBuilder.setType(ObjectClass.ACCOUNT_NAME);
+        // UID
+        ocBuilder.addAttributeInfo(buildAttributeInfo(Uid.NAME, String.class, SqlCAWRestConstants.OBJECT_ATTR_UID,
+                AttributeInfo.Flags.NOT_UPDATEABLE, AttributeInfo.Flags.NOT_CREATABLE));
+        // Name
+        ocBuilder.addAttributeInfo(buildAttributeInfo(Name.NAME, String.class, SqlCAWRestConstants.OBJECT_ATTR_NAME));
+        // cod_grupo
+        ocBuilder.addAttributeInfo(buildAttributeInfo(SqlCAWRestConstants.USER_COD_GRUPO, String.class,
+                null));
+        // cod_parceiro
+        ocBuilder.addAttributeInfo(buildAttributeInfo(SqlCAWRestConstants.USER_COD_PARCEIRO, String.class,
+                null));
+        // cod_tipo_usu
+        ocBuilder.addAttributeInfo(buildAttributeInfo(SqlCAWRestConstants.USER_COD_TIPO_USU, String.class,
+                null));
+        // cod_usu
+        ocBuilder.addAttributeInfo(buildAttributeInfo(SqlCAWRestConstants.USER_COD_USU, String.class, null));
+        //dat_alteracao_senha
+        ocBuilder.addAttributeInfo(buildAttributeInfo(SqlCAWRestConstants.USER_DAT_ALTERACAO_SENHA, String.class,
+                null));
+        // dat_ultimo_acesso
+        ocBuilder.addAttributeInfo(buildAttributeInfo(SqlCAWRestConstants.USER_DAT_ULTIMO_ACESSO, String.class,
+                null));
+        //dsc_email
+        ocBuilder.addAttributeInfo(buildAttributeInfo(SqlCAWRestConstants.USER_DSC_EMAIL, String.class,
+                null));
+        // flg_ativo
+        ocBuilder.addAttributeInfo(buildAttributeInfo(SqlCAWRestConstants.USER_FLG_ATIVO, String.class,
+                null));
+        // flg_usu_bloqueado
+        ocBuilder.addAttributeInfo(buildAttributeInfo(SqlCAWRestConstants.USER_FLG_USU_BLOQUEADO, String.class,
+                null));
+        // id_usu
+        ocBuilder.addAttributeInfo(buildAttributeInfo(SqlCAWRestConstants.USER_ID_USU, String.class,
+                null));
+        // nom_usu
+        ocBuilder.addAttributeInfo(buildAttributeInfo(SqlCAWRestConstants.USER_NOM_USU, String.class,
+                null));
+        // IDC_CTL_SEN_EXN
+        ocBuilder.addAttributeInfo(buildAttributeInfo(SqlCAWRestConstants.USER_IDC_CTL_SEN_EXN, String.class,
+                null));
+        // qtd_senha_invalida
+        ocBuilder.addAttributeInfo(buildAttributeInfo(SqlCAWRestConstants.USER_QTD_SENHA_INVALIDA, String.class,
+                null));
+        // Password
+        ocBuilder.addAttributeInfo(buildAttributeInfo(OperationalAttributes.PASSWORD_NAME, GuardedString.class,
+                SqlCAWRestConstants.USER_ATTR_PASSWORD, AttributeInfo.Flags.NOT_READABLE,
+                AttributeInfo.Flags.NOT_RETURNED_BY_DEFAULT));
+        // Administrative Status
+        ocBuilder.addAttributeInfo(buildAttributeInfo(OperationalAttributes.ENABLE_NAME, Boolean.class,
+                SqlCAWRestConstants.USER_ATTR_ENABLED));
+        sb.defineObjectClass(ocBuilder.build());
+
+        return null;
+    }
+
+    private AttributeInfo buildAttributeInfo(String name, Class type, String nativeName, AttributeInfo.Flags... flags) {
+
+        AttributeInfoBuilder aib = new AttributeInfoBuilder(name);
+        aib.setType(type);
+
+        if (nativeName == null) {
+            nativeName = name;
+        }
+
+        aib.setNativeName(nativeName);
+
+        if (flags.length != 0) {
+            Set<AttributeInfo.Flags> set = new HashSet<>();
+            set.addAll(Arrays.asList(flags));
+            aib.setFlags(set);
+        }
+
+        return aib.build();
     }
 }
