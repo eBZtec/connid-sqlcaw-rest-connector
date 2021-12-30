@@ -12,8 +12,8 @@ public abstract class BaseTest {
 
         SqlCAWRestConfiguration config = new SqlCAWRestConfiguration();
         config.setUrl("http://localhost:8091");
-        config.setUsername("user");
-        config.setPassword(new GuardedString("user".toCharArray()));
+        config.setUsername("sqlcaw");
+        config.setPassword(new GuardedString("smartway".toCharArray()));
 
         return setupConnector(config);
     }
