@@ -173,7 +173,7 @@ public class SqlCAWRestConnector extends AbstractSqlCAWRestConnector implements 
 
         user.setEnabled(getAttributeValue(OperationalAttributes.ENABLE_NAME, Boolean.class, attributes));
 
-        return null;
+        return user;
     }
 
     private <T> T getAttributeValue(String name, Class<T> type, Set<Attribute> attributes) {
@@ -285,7 +285,7 @@ public class SqlCAWRestConnector extends AbstractSqlCAWRestConnector implements 
     @Override
     public void test() {
         try {
-            connection.getTestService().test();
+            testService.test();
             LOG.info("Test service execution finished");
         } catch(Exception ex) {
             handleGenericException(ex, "Test connection failed, reason: " + ex.getMessage());
