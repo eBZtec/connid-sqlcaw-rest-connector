@@ -351,7 +351,8 @@ public class SqlCAWRestConnector extends AbstractSqlCAWRestConnector implements 
                 SqlCAWRestConstants.USER_ATTR_ENABLED));
         sb.defineObjectClass(ocBuilder.build());
 
-        return null;
+        LOG.info("Connector finished building of the schema");
+        return sb.build();
     }
 
     private AttributeInfo buildAttributeInfo(String name, Class type, String nativeName, AttributeInfo.Flags... flags) {
