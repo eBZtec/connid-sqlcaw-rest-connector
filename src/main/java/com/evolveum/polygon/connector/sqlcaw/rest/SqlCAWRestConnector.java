@@ -138,6 +138,7 @@ public class SqlCAWRestConnector extends AbstractSqlCAWRestConnector implements 
         }
     }
 
+    // Do midpoint para  o zato
     @Override
     protected RUser translateUser(Uid uid, Set<Attribute> attributes) {
 
@@ -227,6 +228,7 @@ public class SqlCAWRestConnector extends AbstractSqlCAWRestConnector implements 
         object.setName(name.getNameValue());
     }
 
+    // do Zato para o Midpoint
     @Override
     protected ConnectorObject translate(RObject object) {
 
@@ -300,8 +302,7 @@ public class SqlCAWRestConnector extends AbstractSqlCAWRestConnector implements 
 
         ocBuilder.setType(ObjectClass.ACCOUNT_NAME);
         // UID
-        ocBuilder.addAttributeInfo(buildAttributeInfo(Uid.NAME, String.class, SqlCAWRestConstants.OBJECT_ATTR_UID,
-                AttributeInfo.Flags.NOT_UPDATEABLE, AttributeInfo.Flags.NOT_CREATABLE));
+        ocBuilder.addAttributeInfo(buildAttributeInfo(Uid.NAME, String.class, SqlCAWRestConstants.OBJECT_ATTR_UID));
         // Name
         ocBuilder.addAttributeInfo(buildAttributeInfo(Name.NAME, String.class, SqlCAWRestConstants.OBJECT_ATTR_NAME));
         // cod_grupo

@@ -18,6 +18,7 @@ public class RUser extends RObject{
     private String nom_usu;
     private String qtd_senha_invalida;
     private Boolean enabled;
+    // se precisar mais um attr, criar get e set, e mapear nos metodos hashcode, equals e toString
 
     public String getCod_grupo() {
         return cod_grupo;

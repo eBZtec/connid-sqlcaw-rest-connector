@@ -20,6 +20,7 @@ public interface SqlCAWRestConstants {
     String USER_NOM_USU = "nom_usu";
     String USER_IDC_CTL_SEN_EXN = "idc_ctl_sen_exn";
     String USER_QTD_SENHA_INVALIDA = "qtd_senha_invalida";
+    // mapear o novo atributo, o nome deve ser igual ao da tabela no banco de dados
 
     /* Midpoint Operational attributes */
     String USER_ATTR_PASSWORD = "password";
